@@ -4,21 +4,41 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
+#include <string.h>
+#include "hunter.h"
 #include "Game.h"
 #include "HunterView.h"
 
-// 1927 lab8 code, from John Shepard
-//#include "graph.h"
-//#include "set.h"
+// set.c ... simple, inefficient Set of Strings
+// Written by John Shepherd, September 2015
+#define strEQ(s,t) (strcmp((s),(t)) == 0)
+#define strLT(s,t) (strcmp((s),(t)) < 0)
 
-// TODO: HunterView: create a map in newHunterView and store it in the view struct (its named "Map m")
-// TODO: HunterView: change all instances of creating new Map to use the map that's stored in the view struct
-// TODO: HunterView: store the past messages in the struct (2nd param for newHunterView)
-// TODO: HunterView: helper function to get specific past messages params:(turnNumber, playerID)
-// TODO: HunterView: helper function to get the last hunter message made
-// TODO: HunterView: helper function to get the all messages that have being made by hunters this turn
-// TODO: HunterView: helper function to get the all messages that have being made by hunters last turn
-// TODO: HunterView: helper function to get the map stored in the view struct
+typedef struct Node *Link;
+
+typedef struct Node {
+	char *val;
+	Link  next;
+} Node;
+
+typedef struct SetRep {
+	int   nelems;
+	Link  elems;
+} SetRep;
+
+// queue.c by John Shepherd
+
+typedef struct QueueNode {
+	Item value;
+	struct QueueNode *next;
+} QueueNode;
+
+typedef struct QueueRep {
+	QueueNode *head;  // ptr to first node
+	QueueNode *tail;  // ptr to last node
+} QueueRep;
+
 
 // TODO: function: find fastest way between 2 points on the map
 // TODO: function: write data into string (encode data)
@@ -29,7 +49,6 @@ struct message {
     int flagType; // trailfound, follow
     LocationID locationID;
 };
-
 
 void decideHunterMove(HunterView gameState)
 {
@@ -57,7 +76,7 @@ void decideHunterMove(HunterView gameState)
 
 		registerBestPlay(idToName(places[0]), "On holiday");
 		printf("pos: %s\n", idToName(places[0]));
-
+	}
 
     // get past messages
     // if flagged trail found
@@ -80,10 +99,223 @@ void decideHunterMove(HunterView gameState)
     //} else {
 	//	registerBestPlay("LO","I'm on holiday in London");
 	//}
-	}
 }
 
 //LocationID getNextLocationInPath(char* orig, char* dest) {
 //	LocationID nextLocation = malloc();
 //   = whereCanIgo(gameState, &numLocations, TRUE, TRUE, TRUE);
 //}
+
+/ newSet()
+// - create an initially empty Set
+Set newSet()
+{
+	Set new = malloc(sizeof(SetRep));
+	assert(new != NULL);
+	new->nelems = 0;
+	new->elems = NULL;
+	return new;
+}
+
+// disposeSet(Set)
+// - clean up memory associated with Set
+void disposeSet(Set s)
+{
+	if (s == NULL) return;
+	Link next, curr = s->elems;
+	while (curr != NULL) {
+		next = curr->next;
+		disposeNode(curr);
+		curr = next;
+	}
+}
+
+// insertInto(Set,Str)
+// - ensure that Str is in Set
+void insertInto(Set s, char *str)
+{
+	assert(s != NULL);
+	Link curr, prev;
+	int found = findNode(s->elems,str,&curr,&prev);
+	if (found) return; // already in Set
+	Link new = newNode(str);
+	s->nelems++;
+	if (prev == NULL) {
+		// add at start of list of elems
+		new->next = s->elems;
+		s->elems = new;
+	}
+	else {
+		// add into list of elems
+		new->next = prev->next;
+		prev->next = new;
+	}
+}
+
+// dropFrom(Set,Str)
+// - ensure that Str is not in Set
+void dropFrom(Set s, char *str)
+{
+	assert(s != NULL);
+	Link curr, prev;
+	int found = findNode(s->elems,str,&curr,&prev);
+	if (!found) return;
+	s->nelems--;
+	if (prev == NULL)
+		s->elems = curr->next;
+	else
+		prev->next = curr->next;
+	disposeNode(curr);
+}
+
+// isElem(Set,Str)
+// - check whether Str is contained in Set
+int isElem(Set s, char *str)
+{
+	assert(s != NULL);
+	Link curr, prev;
+	return findNode(s->elems,str,&curr,&prev);
+}
+
+// nElems(Set)
+// - return # elements in Set
+int  nElems(Set s)
+{
+	assert(s != NULL);
+	return s->nelems;
+}
+
+// showSet(Set)
+// - display Set (for debugging)
+void showSet(Set s)
+{
+	Link curr;
+	if (s->nelems == 0)
+		printf("Set is empty\n");
+	else {
+		printf("Set has %d elements:\n",s->nelems);
+		int id = 0;
+		curr = s->elems;
+		while (curr != NULL) {
+			printf("[%03d] %s\n", id, curr->val);
+			id++;
+			curr = curr->next;
+		}
+	}
+}
+
+// Helper functions
+
+static Link newNode(char *str)
+{
+	Link new = malloc(sizeof(Node));
+	assert(new != NULL);
+	new->val = strdup(str);
+	new->next = NULL;
+	return new;
+}
+
+static void disposeNode(Link curr)
+{
+	assert(curr != NULL);
+	free(curr->val);
+	free(curr);
+}
+
+// findNode(L,Str)
+// - finds where Str could be added into L
+// - if already in L, curr->val == Str
+// - if not already in L, curr and prev indicate where to insert
+// - return value indicates whether Str found or not
+static int findNode(Link list, char *str, Link *cur, Link *pre)
+{
+	Link curr = list, prev = NULL;
+	while (curr != NULL && strLT(curr->val,str)) {
+		prev = curr;
+		curr = curr->next;
+	}
+	*cur = curr; *pre = prev;
+	return (curr != NULL && strEQ(str,curr->val));
+}
+
+// Queue.h ... implementation of Queue ADT
+// assumes that Item is an assignable type
+// (e.g. int, pointer) defined in Queue.h
+
+// create new empty Queue
+Queue newQueue()
+{
+	Queue q;
+	q = malloc(sizeof(QueueRep));
+	assert(q != NULL);
+	q->head = NULL;
+	q->tail = NULL;
+	return q;
+}
+
+// free memory used by Queue
+void dropQueue(Queue Q)
+{
+	QueueNode *curr, *next;
+	assert(Q != NULL);
+	// free list nodes
+	curr = Q->head;
+	while (curr != NULL) {
+		next = curr->next;
+		free(curr);
+		curr = next;
+	}
+	// free queue rep
+	free(Q);
+}
+
+// display as 3 > 5 > 4 > ...
+void showQueue(Queue Q)
+{
+	QueueNode *curr;
+	assert(Q != NULL);
+	// free list nodes
+	curr = Q->head;
+	while (curr != NULL) {
+		showItem(curr->value);
+		if (curr->next != NULL)
+			printf(" > ");
+		curr = curr->next;
+	}
+	// free queue rep
+	free(Q);
+}
+
+// add item at end of Queue
+void QueueJoin(Queue Q, Item it)
+{
+	assert(Q != NULL);
+	QueueNode *new = malloc(sizeof(QueueNode));
+	assert(new != NULL);
+	new->value = it;
+	new->next = NULL;
+	if (Q->head == NULL)
+		Q->head = new;
+	if (Q->tail != NULL)
+		Q->tail->next = new;
+	Q->tail = new;
+}
+
+// remove item from front of Queue
+Item QueueLeave(Queue Q)
+{
+	assert(Q != NULL);
+	assert(Q->head != NULL);
+	Item it = Q->head->value;
+	QueueNode *old = Q->head;
+	Q->head = old->next;
+	if (Q->head == NULL) Q->tail = NULL;
+	free(old);
+	return it;
+}
+
+// check for no items
+int QueueIsEmpty(Queue Q)
+{
+	return (Q->head == NULL);
+}
