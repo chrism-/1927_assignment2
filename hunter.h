@@ -7,6 +7,7 @@
 // set.h ... interface to simple Set of Strings
 // Written by John Shepherd, September 2015
 
+
 #include "Game.h"
 #include "HunterView.h"
 
