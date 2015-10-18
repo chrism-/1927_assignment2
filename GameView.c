@@ -16,6 +16,7 @@ struct gameView {
     int location[NUM_PLAYERS];
     int blood[NUM_PLAYERS];
     int trail[NUM_PLAYERS][TRAIL_SIZE];
+    PlayerMessage** messages;
 };
 
 
@@ -24,6 +25,8 @@ GameView newGameView(char *pastPlays, PlayerMessage messages[])
 {
     //REPLACE THIS WITH YOUR OWN IMPLEMENTATION
     GameView gameView = malloc(sizeof(struct gameView));
+
+    gameView->messages = &messages;
 
     gameView->map = newMap();
 
@@ -331,4 +334,10 @@ LocationID *connectedLocations(GameView currentView, int *numLocations,
 
 Map getMap(GameView currentView) {
     return currentView->map;
+}
+
+PlayerMessage* getMessageLastTurnCurPlayer(GameView currentView, PlayerID player) {
+    int numOfItems = sizeof(*(currentView->messages))/sizeof(*(currentView->messages)[0]);
+    //assert(numOfItems > 5);
+    return currentView->messages[numOfItems-6];
 }

@@ -7,6 +7,10 @@
 // set.h ... interface to simple Set of Strings
 // Written by John Shepherd, September 2015
 
+#include "Game.h"
+#include "HunterView.h"
+
+typedef struct Node *Link;
 typedef struct SetRep *Set;
 
 // Function signatures
@@ -18,9 +22,10 @@ void dropFrom(Set,char *);
 int  isElem(Set,char *);
 int  nElems(Set);
 void showSet(Set);
-static Link newNode(char *);
-static void disposeNode(Link);
-static int  findNode(Link,char *,Link *,Link *);
+
+Link newNode(char *);
+void disposeNode(Link);
+int  findNode(Link,char *,Link *,Link *);
 
 // Queue.h ... interface to Queue-of-BSTree-nodes ADT
 typedef struct QueueRep *Queue;
@@ -28,8 +33,8 @@ typedef struct QueueRep *Queue;
 Queue newQueue(); // create new empty queue
 void dropQueue(Queue); // free memory used by queue
 void showQueue(Queue); // display as 3 > 5 > 4 > ...
-void QueueJoin(Queue,Item); // add item on queue
-Item QueueLeave(Queue); // remove item from queue
+void QueueJoin(Queue,LocationID*); // add item on queue
+LocationID* QueueLeave(Queue); // remove item from queue
 int QueueIsEmpty(Queue); // check for no items
 
 

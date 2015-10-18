@@ -196,3 +196,7 @@ LocationID *whereCanTheyGo(DracView currentView, int *numLocations,
     *numLocations = numValidLocations;
     return validLocations;
 }
+
+PlayerMessage* MessageLastTurn(DracView currentView) {
+    return getMessageLastTurnCurPlayer(currentView->gameView, PLAYER_DRACULA);
+}

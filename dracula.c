@@ -36,63 +36,92 @@ void decideDraculaMove(DracView gameState)
 	DraculaNextPossibleMove = whereCanIgo(gameState, numLocations, 1, 1);
 
 	*/
-   char* nextPos = NULL;
+   	char* nextPos = NULL;
 	char* prevPos = NULL;
 	char* hidePos = NULL;
-   if (giveMeTheRound(gameState) == 0){
+   	if (giveMeTheRound(gameState) == 0){
       nextPos = "MR";
-   } else if (strcmp(nextPos,"MR") == 0) {
-      nextPos = "TO";
-      prevPos = "MR";
-   } else if (strcmp(nextPos,"TO") == 0) {
-      nextPos = "BA";
-      prevPos = "TO";
-   } else if (strcmp(nextPos,"BA") == 0) {
-      nextPos = "SR";
-      prevPos = "BA";
-   } else if (strcmp(nextPos,"SR") == 0 && strcmp(prevPos,"BA") == 0) {
-      nextPos = "MA";
-      prevPos = "SR";
-   } else if (strcmp(nextPos,"MA") == 0) {
-      nextPos = "HI";
-      hidePos = "MA";
-   } else if (strcmp(nextPos,"HI") == 0 && strcmp(HidePos,"MA") == 0){
-      nextPos = "AL";
-      prevPos = "HI";
-   } else if (strcmp(nextPos,"AL") == 0) {
-      nextPos = "GR";
-      prevPos = "AL";
-   } else if (strcmp(nextPos,"GR") == 0) {
-      nextPos = "LS";
-      prevPos = "GR";
-   } else if (strcmp(nextPos,"LS") == 0) {
-      nextPos = "SN";
-      prevPos = "LS";
-   } else if (strcmp(nextPos,"SN") == 0) {
-      nextPos = "SR";
-      prevPos = "SN";
-   } else if (strcmp(nextPos,"SR") == 0 && strcmp(prevPos,"SN") == 0) {
-      nextPos = "BO";
-      prevPos = "SR";
-   } else if (strcmp(nextPos,"BO") == 0) {
-      nextPos = "CF";
-      hidePos = "BO";
-   } else if (strcmp(nextPos,"CF") == 0) {
-      nextPos = "GE";
-      HidePos = "CF";
-   } else if (strcmp(nextPos,"GE") == 0) {
-      nextPos = "ZU";
-      HidePos = "GE";
-   } else if (strcmp(nextPos,"ZU") == 0) {
-      nextPos = "MI";
-      HidePos = "ZU";
-   } else if (strcmp(nextPos,"MI") == 0) {
-      nextPos = "HI";
-      HidePos = "MI";
-   } else if (strcmp(nextPos,"HI") == 0 && strcmp(prevPos,"MI") == 0){
-   	nextPos = "MR";
-   	prevPos = "HI";
+  	} else {
+		PlayerMessage message;
+		strcpy(message, *(MessageLastTurn(gameState)));
+
+		strncpy(nextPos, message, 2);
+		strncpy(prevPos, message+2, 2);
+		strncpy(hidePos, message+4, 2);
+
+	  	if (strcmp(nextPos,"MR") == 0) {
+	      nextPos = "TO";
+	      prevPos = "MR";
+	   } else if (strcmp(nextPos,"TO") == 0) {
+	      nextPos = "BA";
+	      prevPos = "TO";
+	   } else if (strcmp(nextPos,"BA") == 0) {
+	      nextPos = "SR";
+	      prevPos = "BA";
+	   } else if (strcmp(nextPos,"SR") == 0 && strcmp(prevPos,"BA") == 0) {
+	      nextPos = "MA";
+	      prevPos = "SR";
+	   } else if (strcmp(nextPos,"MA") == 0) {
+	      nextPos = "HI";
+	      hidePos = "MA";
+	  } else if (strcmp(nextPos,"HI") == 0 && strcmp(hidePos,"MA") == 0){
+	      nextPos = "AL";
+	      prevPos = "HI";
+	   } else if (strcmp(nextPos,"AL") == 0) {
+	      nextPos = "GR";
+	      prevPos = "AL";
+	   } else if (strcmp(nextPos,"GR") == 0) {
+	      nextPos = "LS";
+	      prevPos = "GR";
+	   } else if (strcmp(nextPos,"LS") == 0) {
+	      nextPos = "SN";
+	      prevPos = "LS";
+	   } else if (strcmp(nextPos,"SN") == 0) {
+	      nextPos = "SR";
+	      prevPos = "SN";
+	   } else if (strcmp(nextPos,"SR") == 0 && strcmp(prevPos,"SN") == 0) {
+	      nextPos = "BO";
+	      prevPos = "SR";
+	   } else if (strcmp(nextPos,"BO") == 0) {
+	      nextPos = "CF";
+	      hidePos = "BO";
+	   } else if (strcmp(nextPos,"CF") == 0) {
+	      nextPos = "GE";
+	      hidePos = "CF";
+	   } else if (strcmp(nextPos,"GE") == 0) {
+	      nextPos = "ZU";
+	      hidePos = "GE";
+	   } else if (strcmp(nextPos,"ZU") == 0) {
+	      nextPos = "MI";
+	      hidePos = "ZU";
+	   } else if (strcmp(nextPos,"MI") == 0) {
+	      nextPos = "HI";
+	      hidePos = "MI";
+	  } else if ((strcmp(nextPos,"HI") == 0) && (strcmp(prevPos,"MI") == 0)){
+	   	nextPos = "MR";
+	   	prevPos = "HI";
+	   }
    }
 
-	registerBestPlay(nextPos,"Mwuwuwuhahahaha");
+	PlayerMessage msg;
+
+	if (prevPos != NULL) {
+		strcat(msg, prevPos);
+	} else {
+		strcat(msg, "XX");
+	}
+	if (nextPos != NULL) {
+		strcat(msg, nextPos);
+	} else {
+		strcat(msg, "XX");
+	}
+	if (hidePos != NULL) {
+		strcat(msg, hidePos);
+	} else {
+		strcat(msg, "XX");
+	}
+
+	strcat(msg, "\0");
+
+	registerBestPlay(nextPos,msg);
 }

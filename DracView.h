@@ -130,4 +130,6 @@ LocationID *whereCanIgo(DracView currentView, int *numLocations, int road, int s
 LocationID *whereCanTheyGo(DracView currentView, int *numLocations,
                            PlayerID player, int road, int rail, int sea);
 
+PlayerMessage* MessageLastTurn(DracView currentView);
+
 #endif

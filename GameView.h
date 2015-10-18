@@ -130,4 +130,6 @@ LocationID *connectedLocations(GameView currentView, int *numLocations,
 // get the map stored in the struct
 Map getMap(GameView currentView);
 
+PlayerMessage* getMessageLastTurnCurPlayer(GameView currentView, PlayerID player);
+
 #endif
