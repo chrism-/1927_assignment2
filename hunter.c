@@ -6,16 +6,21 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include "hunter.h"
 #include "Game.h"
+#include "Map.h"
+#include "GameView.h"
 #include "HunterView.h"
+#include "hunter.h"
+
 
 // set.c ... simple, inefficient Set of Strings
 // Written by John Shepherd, September 2015
 #define strEQ(s,t) (strcmp((s),(t)) == 0)
 #define strLT(s,t) (strcmp((s),(t)) < 0)
 
-typedef struct Node *Link;
+static Link newNode(char *);
+static void disposeNode(Link);
+static int  findNode(Link,char *,Link *,Link *);
 
 typedef struct Node {
 	char *val;
@@ -99,4 +104,187 @@ void decideHunterMove(HunterView gameState)
     //} else {
 	//	registerBestPlay("LO","I'm on holiday in London");
 	//}
+}
+
+//LocationID getNextLocationInPath(char* orig, char* dest) {
+//	LocationID nextLocation = malloc();
+//   = whereCanIgo(gameState, &numLocations, TRUE, TRUE, TRUE);
+//}
+
+// newSet()
+// - create an initially empty Set
+Set newSet()
+{
+	Set new = malloc(sizeof(SetRep));
+	assert(new != NULL);
+	new->nelems = 0;
+	new->elems = NULL;
+	return new;
+}
+
+// disposeSet(Set)
+// - clean up memory associated with Set
+void disposeSet(Set s)
+{
+	if (s == NULL) return;
+	Link next, curr = s->elems;
+	while (curr != NULL) {
+		next = curr->next;
+		disposeNode(curr);
+		curr = next;
+	}
+}
+
+// insertInto(Set,Str)
+// - ensure that Str is in Set
+void insertInto(Set s, char *str)
+{
+	assert(s != NULL);
+	Link curr, prev;
+	int found = findNode(s->elems,str,&curr,&prev);
+	if (found) return; // already in Set
+	Link new = newNode(str);
+	s->nelems++;
+	if (prev == NULL) {
+		// add at start of list of elems
+		new->next = s->elems;
+		s->elems = new;
+	}
+	else {
+		// add into list of elems
+		new->next = prev->next;
+		prev->next = new;
+	}
+}
+
+// dropFrom(Set,Str)
+// - ensure that Str is not in Set
+void dropFrom(Set s, char *str)
+{
+	assert(s != NULL);
+	Link curr, prev;
+	int found = findNode(s->elems,str,&curr,&prev);
+	if (!found) return;
+	s->nelems--;
+	if (prev == NULL)
+		s->elems = curr->next;
+	else
+		prev->next = curr->next;
+	disposeNode(curr);
+}
+
+// isElem(Set,Str)
+// - check whether Str is contained in Set
+int isElem(Set s, char *str)
+{
+	assert(s != NULL);
+	Link curr, prev;
+	return findNode(s->elems,str,&curr,&prev);
+}
+
+// nElems(Set)
+// - return # elements in Set
+int  nElems(Set s)
+{
+	assert(s != NULL);
+	return s->nelems;
+}
+
+// Helper functions
+
+static Link newNode(char *str)
+{
+	Link new = malloc(sizeof(Node));
+	assert(new != NULL);
+	new->val = strdup(str);
+	new->next = NULL;
+	return new;
+}
+
+static void disposeNode(Link curr)
+{
+	assert(curr != NULL);
+	free(curr->val);
+	free(curr);
+}
+
+// findNode(L,Str)
+// - finds where Str could be added into L
+// - if already in L, curr->val == Str
+// - if not already in L, curr and prev indicate where to insert
+// - return value indicates whether Str found or not
+static int findNode(Link list, char *str, Link *cur, Link *pre)
+{
+	Link curr = list, prev = NULL;
+	while (curr != NULL && strLT(curr->val,str)) {
+		prev = curr;
+		curr = curr->next;
+	}
+	*cur = curr; *pre = prev;
+	return (curr != NULL && strEQ(str,curr->val));
+}
+
+// Queue.h ... implementation of Queue ADT
+// assumes that Item is an assignable type
+// (e.g. int, pointer) defined in Queue.h
+
+// create new empty Queue
+Queue newQueue()
+{
+	Queue q;
+	q = malloc(sizeof(QueueRep));
+	assert(q != NULL);
+	q->head = NULL;
+	q->tail = NULL;
+	return q;
+}
+
+// free memory used by Queue
+void dropQueue(Queue Q)
+{
+	QueueNode *curr, *next;
+	assert(Q != NULL);
+	// free list nodes
+	curr = Q->head;
+	while (curr != NULL) {
+		next = curr->next;
+		free(curr);
+		curr = next;
+	}
+	// free queue rep
+	free(Q);
+}
+
+// add item at end of Queue
+void QueueJoin(Queue Q, LocationID* it)
+{
+	assert(Q != NULL);
+	QueueNode *new = malloc(sizeof(QueueNode));
+	assert(new != NULL);
+	new->value = it;
+	new->next = NULL;
+	if (Q->head == NULL)
+		Q->head = new;
+	if (Q->tail != NULL)
+		Q->tail->next = new;
+	Q->tail = new;
+}
+
+// remove item from front of Queue
+LocationID* QueueLeave(Queue Q)
+{
+	assert(Q != NULL);
+	assert(Q->head != NULL);
+	LocationID* it = Q->head->value;
+	QueueNode *old = Q->head;
+	Q->head = old->next;
+	if (Q->head == NULL) Q->tail = NULL;
+	free(old);
+	return it;
+}
+
+// check for no items
+int QueueIsEmpty(Queue Q)
+{
+	return (Q->head == NULL);
 }
