@@ -1,324 +1,443 @@
 // GameView.c ... GameView ADT implementation
+// COMP1927 15s2 ... ... basic GameView (supplied code)
+// Code by TheGroup from COMP1927 14s2
 
 #include <stdlib.h>
-#include <assert.h>
 #include <stdio.h>
+#include <assert.h>
 #include "Globals.h"
 #include "Game.h"
 #include "GameView.h"
+#include "Places.h"
 #include "Map.h"
 
-struct gameView {
-    Map map;
-    Round roundCounter;
-    int whoseTurn;
-    int gamePoints;
-    int location[NUM_PLAYERS];
-    int blood[NUM_PLAYERS];
-    int trail[NUM_PLAYERS][TRAIL_SIZE];
-    PlayerMessage** messages;
+#define TURN_LENGTH 8
+
+// Encounterable items in cities
+#define MAX_TRAPS 3
+#define NO_ITEM -1
+
+static int matches (char *pastPlays, char *input, int index);
+static int numTurns (char *pastPlays);
+static void testMatches ();
+static void addLocation (GameView view, PlayerID player, LocationID newLoc);
+static int seaLocation (LocationID loc);
+
+
+struct city {
+    // Values are either NO_ITEM = -1 for not existant, or the turn number the item was placed
+    int trap[MAX_TRAPS];
+    int vamp;
 };
 
+struct gameView {
+    int score;
+    int lifePts[4];
+    int bloodPts;
+
+    //these are all typedefed as ints
+    LocationID locHistory[NUM_PLAYERS][TRAIL_SIZE];
+    Round round;
+    PlayerID currPlayer;
+
+    // Trap and immature vamp tracking
+    struct city cities[NUM_MAP_LOCATIONS];
+};
+
+static LocationID abbrevToIdExtended(char * abbrev) {
+    LocationID loc = abbrevToID(abbrev);
+    if (loc != NOWHERE) {
+        return loc;
+    }
+    int code = abbrevToID(abbrev);
+    if (code >= MIN_MAP_LOCATION && code <= MAX_MAP_LOCATION) return code;
+    else if(abbrev[0] == 'C' && abbrev[1] == '?') return CITY_UNKNOWN;
+    else if(abbrev[0] == 'S' && abbrev[1] == '?') return SEA_UNKNOWN;
+    else if(abbrev[0] == 'H' && abbrev[1] == 'I') return HIDE;
+    else if(abbrev[0] == 'D' && abbrev[1] == '1') return DOUBLE_BACK_1;
+    else if(abbrev[0] == 'D' && abbrev[1] == '2') return DOUBLE_BACK_2;
+    else if(abbrev[0] == 'D' && abbrev[1] == '3') return DOUBLE_BACK_3;
+    else if(abbrev[0] == 'D' && abbrev[1] == '4') return DOUBLE_BACK_4;
+    else if(abbrev[0] == 'D' && abbrev[1] == '5') return DOUBLE_BACK_5;
+    else if(abbrev[0] == 'T' && abbrev[1] == 'P') return TELEPORT;
+
+    assert(0 && "Impossible location code");
+    return NOWHERE;
+}
+
+static int originalMove (int index, char * pastPlays) {
+    LocationID curr = abbrevToIdExtended(&pastPlays[index]+1);
+    assert(pastPlays[index] == 'D');
+
+    //Dracula's location in the given trail may be a double back or hide
+    //So we need to go look at the corresponding node in the trail
+    while (HIDE <= curr && curr <= DOUBLE_BACK_5) {
+        //If he hid, he was in the previous city
+        if (curr == HIDE) {
+            index -= 40;
+        } else {
+            assert(curr <= DOUBLE_BACK_5 && curr >= DOUBLE_BACK_1);
+            //If he doubled back, go back that many steps
+            index -= (curr - DOUBLE_BACK_1 + 1) * 40;
+        }
+        assert(pastPlays[index] == 'D');
+        curr = abbrevToIdExtended(&pastPlays[index+1]);
+    }
+    return curr;
+}
 
 // Creates a new GameView to summarise the current state of the game
-GameView newGameView(char *pastPlays, PlayerMessage messages[])
-{
-    //REPLACE THIS WITH YOUR OWN IMPLEMENTATION
-    GameView gameView = malloc(sizeof(struct gameView));
+GameView newGameView(char *pastPlays, PlayerMessage messages[]) {
+    testMatches();
 
-    gameView->messages = &messages;
+    GameView view = malloc(sizeof(struct gameView));
 
-    gameView->map = newMap();
+    int i, j;
+    view->score = GAME_START_SCORE;
+    for (i = 0; i < NUM_PLAYERS - 1; i++)
+        view->lifePts[i] = GAME_START_HUNTER_LIFE_POINTS;
 
-    //Extract information from the pastPlays
-    //how many characters are there in pastPlays
-    int numberOfChars = 0;
-    while(pastPlays[numberOfChars] != 0){
-        numberOfChars++;
+    view->bloodPts = GAME_START_BLOOD_POINTS;
+
+    for (i = 0; i < NUM_PLAYERS; i++)
+        for (j = 0; j < TRAIL_SIZE; j++)
+            view->locHistory[i][j] = NOWHERE;
+
+    for (i=0; i < NUM_MAP_LOCATIONS; i++ ) {
+        for (j=0; j< MAX_TRAPS; j++ )
+            view->cities[i].trap[j] = NO_ITEM;
+        view->cities[i].vamp = NO_ITEM;
     }
 
-    //Initialise the roundCounter
-    if(numberOfChars == 0){
-        gameView->roundCounter = 0;
-    }else gameView->roundCounter = ((int)numberOfChars+1)/40;
+    int currPlayer = PLAYER_LORD_GODALMING;
+    int index;
 
+    int totalTurns = numTurns(pastPlays);
+    int turn = 0;
+    while (turn < totalTurns) {
+        index = turn * TURN_LENGTH; //index in pastPlays string
 
-    //Initialise the turn
-    //whoseTurn has to be passed to getCurrentPlayer()
-    gameView->whoseTurn = (numberOfChars+1)/8;
+        if (matches(pastPlays, "D------", index)) { //drac's turn
 
-    //Initialise the game points
-    gameView->gamePoints = GAME_START_SCORE;
-    //gamepoints decreases by one every time dracula's turn has been finished
-    gameView->gamePoints -= (int)(numberOfChars+1)/ 40;
-    //gamepoints decreases by 13 when vampire is mature(six round after dracula place the immature vampire)
-    int dracVampire = 36;
-    while(dracVampire < (numberOfChars+1)){
-        int vampireDead = 0;
-        int a = 0;
-        for(a = dracVampire + 7; a < dracVampire + 40 * 6; a += 8){
-            int b = dracVampire;
-            while(pastPlays[b] != '.' && ((b-3)/8 % 5) != 4){
-                if(pastPlays[b] == 'V') {
-                    vampireDead = 1;
+            currPlayer = PLAYER_DRACULA;
+
+            //score decreases when it's drac's turn
+            view->score -= SCORE_LOSS_DRACULA_TURN;
+
+            LocationID newLoc = abbrevToIdExtended(&pastPlays[index]+1);
+            LocationID resolvedMove = originalMove(index, pastPlays);
+
+            addLocation(view, PLAYER_DRACULA, newLoc);
+
+            if (validPlace(resolvedMove)) {
+                // Immature vampired placed
+                if (matches(pastPlays, "D--V---|D---V--", index)) {
+                    view->cities[resolvedMove].vamp = turn;
                 }
-                b++;
-            }
-            //six rounds
-            if(vampireDead){
-                gameView->gamePoints -= SCORE_LOSS_VAMPIRE_MATURES;
-                break;
-            }
-        }
-        //dracula can place immature vampire every 13 rounds
-        dracVampire = dracVampire + 40 * 13;
-    }
-
-    //Initialise the blood and life points
-    int a = 0;
-    int b = 0;
-
-    gameView->blood[PLAYER_LORD_GODALMING] = GAME_START_HUNTER_LIFE_POINTS;
-    gameView->blood[PLAYER_DR_SEWARD] = GAME_START_HUNTER_LIFE_POINTS;
-    gameView->blood[PLAYER_VAN_HELSING] = GAME_START_HUNTER_LIFE_POINTS;
-    gameView->blood[PLAYER_MINA_HARKER] = GAME_START_HUNTER_LIFE_POINTS;
-    gameView->blood[PLAYER_DRACULA] = GAME_START_BLOOD_POINTS;
-
-    //change of hunters' health
-    for(a = 3; a < numberOfChars; a += 8){
-        b = a;
-        while(pastPlays[b] != '.' && ((a-3)/8 % 5) != 4){
-            if(pastPlays[b] == 'T'){
-                gameView->blood[(a-3)/8 % 5] -= LIFE_LOSS_TRAP_ENCOUNTER;
-                if(gameView->blood[(a-3)/8 % 5] < 0) gameView->blood[(a-3)/8 % 5] = GAME_START_HUNTER_LIFE_POINTS;
-            }
-            if(pastPlays[b] == 'D') {
-                gameView->blood[(a-3)/8 % 5] -= LIFE_LOSS_DRACULA_ENCOUNTER;
-                gameView->blood[PLAYER_DRACULA] -= LIFE_LOSS_HUNTER_ENCOUNTER;
-            }
-            b++;
-        }
-    }
-    //change of dracula's blood
-    //dracula hate water
-    for(a = 33; a < numberOfChars; a += 40){
-        b = a;
-        char message[3];
-        message[0] = pastPlays[a];
-        message[1] = pastPlays[a+1];
-        message[2] = 0;
-        if((message[0] == 'C' && message[1] == '?')
-            || (message[0] == 'H' && message[1] == 'I')
-            || (message[0] == 'T' && message[1] == 'P')){
-            break;
-        }else if(abbrevToID(message) >= MIN_MAP_LOCATION && abbrevToID(message) <= MAX_MAP_LOCATION){
-            if(idToType(abbrevToID(message)) == SEA) {
-                gameView->blood[PLAYER_DRACULA] -= 2;
-            }
-        }else if(message[0] == 'S' && message[1] == '?'){
-            gameView->blood[PLAYER_DRACULA] -= 2;
-        }else if(message[1] >= '1' && message[1] <= '5'){
-            message[0] = pastPlays[b - 40 * (message[1] - 48)];
-            message[1] = pastPlays[b - 40 * (message[1] - 48) + 1];
-            if(message[0] == 'S' && message[1] == '?'){
-                gameView->blood[PLAYER_DRACULA] -= 2;
-                break;
-            }else if(idToType(abbrevToID(message)) == SEA) gameView->blood[PLAYER_DRACULA] -= 2;
-        }
-    }
-
-
-    //Initialise the location
-    if(numberOfChars == 0){
-        gameView->location[PLAYER_LORD_GODALMING] = UNKNOWN_LOCATION;
-        gameView->location[PLAYER_DR_SEWARD] = UNKNOWN_LOCATION;
-        gameView->location[PLAYER_VAN_HELSING] = UNKNOWN_LOCATION;
-        gameView->location[PLAYER_MINA_HARKER] = UNKNOWN_LOCATION;
-        gameView->location[PLAYER_DRACULA] = UNKNOWN_LOCATION;
-    }else {
-        int first = 0;
-        if(numberOfChars < 32) {
-            for(first = 1; first < numberOfChars; first += 8){
-                char message[3];
-                message[0] = pastPlays[first];
-                message[1] = pastPlays[first+1];
-                message[2] = 0;
-                gameView->location[((first-1)/8) % 5] = abbrevToID(message);
-            }
-            int a = (39 - numberOfChars)/8;
-            int b = 0;
-            while (b < a){
-                gameView->location[4-b] = UNKNOWN_LOCATION;
-                b++;
-            }
-        } else{
-            for(first = numberOfChars - 38;first < numberOfChars; first += 8){
-                char message[3];
-                message[0] = pastPlays[first];
-                message[1] = pastPlays[first+1];
-                message[2] = 0;
-
-                if((first-1)/8 % 5 == 4){
-                    if(message[1] == '?'){
-                        switch(message[0]){
-                            case 'C': gameView->location[PLAYER_DRACULA] = CITY_UNKNOWN; break;
-                            case 'S': gameView->location[PLAYER_DRACULA] = SEA_UNKNOWN; break;
+                // Trap placed
+                if (matches(pastPlays, "D--T---|D---T--", index)) {
+                    i = 0;
+                    int trap_placed = 0;
+                    while (trap_placed != TRUE) {
+                        assert( i < MAX_TRAPS );
+                        if ( view->cities[resolvedMove].trap[i] == NO_ITEM ) {
+                            view->cities[resolvedMove].trap[i] = turn;
+                            trap_placed = TRUE;
                         }
-                    }else if(message[0] == 'H' && message[1] == 'I'){
-                        gameView->location[PLAYER_DRACULA] = HIDE;
-                    }else if(message[1] >= '1' && message[1] <= '5'){
-                        gameView->location[PLAYER_DRACULA] = DOUBLE_BACK_1 + message[1] - 49;
-                    }else if(message[0] == 'T' && message[1] == 'P'){
-                        gameView->location[PLAYER_DRACULA] = TELEPORT;
-                        gameView->blood[PLAYER_DRACULA] += LIFE_GAIN_CASTLE_DRACULA;
-                    }
-                    else{
-                        gameView->location[PLAYER_DRACULA] = abbrevToID(message);
-                        if(gameView->location[PLAYER_DRACULA] == CASTLE_DRACULA){
-                            gameView->blood[PLAYER_DRACULA] += LIFE_GAIN_CASTLE_DRACULA;
-                        }
-                    }
-                }else{
-                    gameView->location[((first-1)/8) % 5] = abbrevToID(message);
-                    if (gameView->location[((first-1)/8) % 5] == ST_JOSEPH_AND_ST_MARYS){
-                        gameView->blood[((first-1)/8) % 5] = GAME_START_HUNTER_LIFE_POINTS;
-                        gameView->gamePoints -= SCORE_LOSS_HUNTER_HOSPITAL;
-                    }
-                    if (gameView->roundCounter >= 2){
-                        message[0] = pastPlays[first - 40];
-                        message[1] = pastPlays[first - 39];
-                        if(abbrevToID(message) == gameView->location[(first-1)/8 % 5]){
-                            gameView->blood[(first-1)/8 % 5] += LIFE_GAIN_REST;
-                            if(gameView->blood[(first-1)/8 % 5] > 9){
-                                gameView->blood[(first-1)/8 % 5] = GAME_START_HUNTER_LIFE_POINTS;
-                            }
-                        }
+                        i++;
                     }
                 }
             }
+
+            //vamp matures
+            if (matches(pastPlays, "D----V-", index)) {
+                view->score -= SCORE_LOSS_VAMPIRE_MATURES;
+            }
+
+            //drac is at sea
+            if (seaLocation(resolvedMove)) {
+                view->bloodPts -= LIFE_LOSS_SEA;
+            }
+
+            //drac at castle
+            if (resolvedMove == TELEPORT || resolvedMove == CASTLE_DRACULA) {
+                view->bloodPts += LIFE_GAIN_CASTLE_DRACULA;
+            }
+
+        } else { //hunters turn
+
+            //determine which hunter's turn it is
+            if (matches(pastPlays, "G------", index)) currPlayer = PLAYER_LORD_GODALMING;
+            else if (matches(pastPlays, "S------", index)) currPlayer = PLAYER_DR_SEWARD;
+            else if (matches(pastPlays, "H------", index)) currPlayer = PLAYER_VAN_HELSING;
+            else if (matches(pastPlays, "M------", index)) currPlayer = PLAYER_MINA_HARKER;
+            else assert(0 && "doesn't match anyone's turn");
+
+            //setting new location of hunter
+            char abbrev[3] = { pastPlays[index + 1], pastPlays[index + 2], 0 };
+            LocationID newLoc = abbrevToID(abbrev);
+            int restAttempted = FALSE;
+
+            //hunter rested
+            if (newLoc == getLocation(view, currPlayer)) {
+                restAttempted = TRUE;
+            }
+
+            addLocation(view, currPlayer, newLoc);
+
+            //hunter encounters up to 3 traps
+            int trapsEncountered = 0;
+            if (matches(pastPlays, "---T---", index)) {
+                view->lifePts[currPlayer] -= LIFE_LOSS_TRAP_ENCOUNTER;
+                trapsEncountered++;
+            }
+            if (matches(pastPlays, "----T--", index)) {
+                view->lifePts[currPlayer] -= LIFE_LOSS_TRAP_ENCOUNTER;
+                trapsEncountered++;
+            }
+            if (matches(pastPlays, "-----T-", index)) {
+                view->lifePts[currPlayer] -= LIFE_LOSS_TRAP_ENCOUNTER;
+                trapsEncountered++;
+            }
+            if (matches(pastPlays, "------T", index)) {
+                view->lifePts[currPlayer] -= LIFE_LOSS_TRAP_ENCOUNTER;
+                trapsEncountered++;
+            }
+            assert( trapsEncountered <= MAX_TRAPS );
+            while ( trapsEncountered > 0 ) {
+                trapsEncountered--;
+                view->cities[newLoc].trap[trapsEncountered] = NO_ITEM;
+            }
+
+            // hunter vanquishes immature vampire
+            if (matches(pastPlays, "---V---|----V--|-----V-|------V", index)) {
+                view->cities[newLoc].vamp = NO_ITEM;
+            }
+
+            //hunter encounters drac
+            if (matches(pastPlays, "---D---|----D--|-----D-|------D", index)) {
+                view->lifePts[currPlayer] -= LIFE_LOSS_DRACULA_ENCOUNTER;
+                view->bloodPts -= LIFE_LOSS_HUNTER_ENCOUNTER;
+
+            }
+
+            //hunter gets teleported to the hospital
+            if (view->lifePts[currPlayer] <= 0) {
+                view->score -= SCORE_LOSS_HUNTER_HOSPITAL;
+                view->lifePts[currPlayer] = GAME_START_HUNTER_LIFE_POINTS;
+                view->locHistory[currPlayer][0] = ST_JOSEPH_AND_ST_MARYS;
+            } else if (restAttempted) {
+                view->lifePts[currPlayer] += LIFE_GAIN_REST;
+                if (view->lifePts[currPlayer] > GAME_START_HUNTER_LIFE_POINTS) {
+                    view->lifePts[currPlayer] = GAME_START_HUNTER_LIFE_POINTS;
+                }
+            }
+
+        }
+
+        // Cull old items/encounters in cities
+        int city;
+        for (city=0; city < NUM_MAP_LOCATIONS; city++) {
+            for (i=0; i< MAX_TRAPS; i++) {
+                if ( view->cities[city].trap[i] < turn - ((TRAIL_SIZE-1)*NUM_PLAYERS) ) {
+                    view->cities[city].trap[i] = NO_ITEM;
+                }
+            }
+            if ( view->cities[city].vamp < turn - ((TRAIL_SIZE-1)*NUM_PLAYERS) ) {
+                view->cities[city].vamp = NO_ITEM;
+            }
+        }
+
+        //next player's turn
+        currPlayer = (currPlayer + 1) % NUM_PLAYERS;
+        turn++;
+    }
+
+    //assuming round is 0 based
+    view->round = turn / NUM_PLAYERS;
+    view->currPlayer = currPlayer;
+
+    return view;
+}
+
+static int seaLocation (LocationID loc) {
+    if (loc == ADRIATIC_SEA
+            || loc == ATLANTIC_OCEAN
+            || loc == BAY_OF_BISCAY
+            || loc == BLACK_SEA
+            || loc == ENGLISH_CHANNEL
+            || loc == IONIAN_SEA
+            || loc == IRISH_SEA
+            || loc == MEDITERRANEAN_SEA
+            || loc == NORTH_SEA
+            || loc == TYRRHENIAN_SEA
+            || loc == SEA_UNKNOWN) {
+
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+static void addLocation (GameView view, PlayerID player, LocationID newLoc) {
+    //each player has an array of LocationIDs with length TRAIL_SIZE
+    //representing the last 6 places they've been
+    //add location pushes all the values down and adds a new one on the top
+
+    assert(player >= PLAYER_LORD_GODALMING && player <= PLAYER_DRACULA);
+    //assert(validPlace(from));
+
+    int i;
+    for (i = TRAIL_SIZE - 1; i > 0; i--) {
+        view->locHistory[player][i] = view->locHistory[player][i-1];
+    }
+    view->locHistory[player][0] = newLoc;
+}
+
+
+static int numTurns (char *pastPlays) {
+    //counts the spaces
+    int count = 1;
+    int i = 0;
+    while (pastPlays[i] != 0) {
+        if (pastPlays[i] == ' ') {
+            count++;
+        }
+        i++;
+    }
+
+    if (i == 0) {
+        return 0;
+    } else {
+        return count;
+    }
+}
+
+
+static void testMatches () {
+    assert (matches ("GST.... SAO.... HCD.... MAO.... DGE.... GGED...", "G------", 0) == 1);
+    assert (matches ("GST.... SAO.... HCD.... MAO.... DGE.... GGED...", "G-------", 0) == 0);
+    assert (matches ("GST.... SAO.... HCD.... MAO.... DGE.... GGED...", "G--D---", 40) == 1);
+    assert (matches ("GST.... SAO.... HCD.... MAO.... DGE.... GGED...", "S|G|H|M", 0) == 1);
+    assert (matches ("GTOTD..", "---D---|----D--|-----D-|------D", 0) == 1);
+    assert (matches ("DC?T.M.", "D--T---|D---T--", 0));
+
+    assert (matches ("cat and other animals", "dog|cat", 0) == 1);
+}
+
+
+//returns true if the sub string matches string at the given index
+// '-' is treated as any character except ' '
+// '|' is treated as the OR character
+// for example matches(string, "cat|dog", i) returns true if either
+//the word cat OR dog is found at index i in string
+static int matches (char *string, char *sub, int index) {
+    int i = 0; //position in sub string
+    int isMatching = TRUE;
+
+    while (string[index + i] != '\0' && sub[i] != '\0') {
+        if (sub[i] == '|') {
+            if (isMatching) {
+                return TRUE;
+            } else {
+                return matches(string, &sub[i+1], index);
+            }
+        } else {
+            if (sub[i] != '-' || string[index + i] == ' ' || string[index + i] == '\0') {
+                if (sub[i] != string[index + i]) {
+                    isMatching = FALSE;
+                }
+            }
+            i++;
+        }
+    }
+    if (sub[i] == '|') {
+        if (isMatching) {
+            return TRUE;
+        } else {
+            return matches(string, &sub[i+1], index);
         }
     }
 
-    //initialising the trail
-    a = 0;
-    b = 0;
-    int counter = 0;
-    int totalNumberPlayers = 0;
-    for (a = numberOfChars - 6; a > 0; a -= 8){
-        int currentPlayer = 0;
-        for(b = a ; b > 0; b -= 40){
-            currentPlayer = (b-1)/8 % 5;
-            char message[3];
-            message[0] = pastPlays[b];
-            message[1] = pastPlays[b+1];
-            message[2] = 0;
-            if((b-1)/8 % 5 == PLAYER_DRACULA){
-                if(message[1] == '?'){
-                    switch(message[0]){
-                        case 'C': gameView->trail[PLAYER_DRACULA][counter] = CITY_UNKNOWN; break;
-                        case 'S': gameView->trail[PLAYER_DRACULA][counter] = SEA_UNKNOWN; break;
-                    }
-                }else if (message[0] == 'H' && message[1] == 'I'){
-                    gameView->trail[PLAYER_DRACULA][counter] = HIDE;
-                }else if (message[1] >= '1' && message[1] <= '5'){
-                    gameView->trail[PLAYER_DRACULA][counter] = DOUBLE_BACK_1 + message[1] - 49;
-                }else if(message[0] == 'T' && message[1] == 'P'){
-                    gameView->trail[PLAYER_DRACULA][counter] = TELEPORT;
-                }else gameView->trail[PLAYER_DRACULA][counter] = abbrevToID(message);
-            }else gameView->trail[currentPlayer][counter] = abbrevToID(message);
-            counter++;
-            if(counter == 6) break;
-        }
-        while(counter < 6){
-            gameView->trail[currentPlayer][counter] = UNKNOWN_LOCATION;
-            counter++;
-        }
-        counter = 0;
-        totalNumberPlayers++;
-        if(totalNumberPlayers > 4) break;
-    }
-
-    return gameView;
+    return (isMatching);
 }
 
 
 // Frees all memory previously allocated for the GameView toBeDeleted
-void disposeGameView(GameView toBeDeleted)
-{
-    disposeMap(toBeDeleted->map);
-    free(toBeDeleted->map);
-    free(toBeDeleted);
+void disposeGameView(GameView toBeDeleted) {
+    free( toBeDeleted );
 }
 
 
 //// Functions to return simple information about the current state of the game
-
 // Get the current round
-Round getRound(GameView currentView)
-{
-    return currentView->roundCounter;
+Round getRound(GameView currentView) {
+    return currentView->round;
 }
+
 
 // Get the id of current player - ie whose turn is it?
-PlayerID getCurrentPlayer(GameView currentView)
-{
-    assert(currentView != NULL);
-    int n;
-    n = currentView->whoseTurn % 5;
-    switch(n){
-        case 0: return PLAYER_LORD_GODALMING; break;
-        case 1: return PLAYER_DR_SEWARD; break;
-        case 2: return PLAYER_VAN_HELSING; break;
-        case 3: return PLAYER_MINA_HARKER; break;
-        case 4: return PLAYER_DRACULA; break;
-        default: return 0;
-    }
+PlayerID getCurrentPlayer(GameView currentView) {
+    return currentView->currPlayer;
 }
+
 
 // Get the current score
-int getScore(GameView currentView)
-{
-    assert(currentView->gamePoints != 0);
-    return currentView->gamePoints;
+int getScore(GameView currentView) {
+    return currentView->score;
 }
+
 
 // Get the current health points for a given player
-int getHealth(GameView currentView, PlayerID player)
-{
-    return currentView->blood[player];
+int getHealth(GameView currentView, PlayerID player) {
+
+    assert(player >= PLAYER_LORD_GODALMING && player <= PLAYER_DRACULA);
+    //assert valid playerID
+
+    int health;
+    if (player == PLAYER_DRACULA) {
+        health = currentView->bloodPts;
+    } else {
+        health = currentView->lifePts[player];
+    }
+
+    return health;
 }
+
 
 // Get the current location id of a given player
-LocationID getLocation(GameView currentView, PlayerID player)
-{
-    return currentView->location[player];
+LocationID getLocation(GameView currentView, PlayerID player) {
+
+    assert(player >= PLAYER_LORD_GODALMING && player <= PLAYER_DRACULA);
+    //assert valid playerID
+    return currentView->locHistory[player][0];
 }
 
-//// Functions that return information about the history of the game
 
+//// Functions that return information about the history of the game
 // Fills the trail array with the location ids of the last 6 turns
-void getHistory(GameView currentView, PlayerID player, LocationID trail[TRAIL_SIZE])
-{
-    int a = 0;
-    while(a < TRAIL_SIZE){
-        trail[a] = currentView->trail[player][a];
-        a++;
+void getHistory(GameView currentView, PlayerID player,
+        LocationID trail[TRAIL_SIZE]) {
+    //goes through the locHistory[] for that player and copies it to trail[]
+
+    assert(player >= PLAYER_LORD_GODALMING && player <= PLAYER_DRACULA);
+    int i;
+    for (i = 0; i < TRAIL_SIZE; i++) {
+        trail[i] = currentView->locHistory[player][i];
     }
 }
 
+
 //// Functions that query the map to find information about connectivity
-
 // Returns an array of LocationIDs for all directly connected locations
-
 LocationID *connectedLocations(GameView currentView, int *numLocations,
-                               LocationID from, PlayerID player, Round round,
-                               int road, int rail, int sea)
-{
-    // COMP1927 15s2 ... basic HunterView (supplied code)
-    // Code by TheGroup from COMP1927 14s2
-    // Modified by Chris Miles 2015
+        LocationID from, PlayerID player, Round round,
+        int road, int rail, int sea) {
+
     assert(validPlace(from));
     assert(player >= PLAYER_LORD_GODALMING && player <= PLAYER_DRACULA);
+
+    Map europe = newMap();
 
     int drac = (player == PLAYER_DRACULA);
 
@@ -327,17 +446,30 @@ LocationID *connectedLocations(GameView currentView, int *numLocations,
     if (drac) railLength = 0;
 
 
-    LocationID  * res =  reachableLocations(currentView->map, numLocations, from, drac, railLength, road, sea);
+    LocationID  * res =  reachableLocations(europe, numLocations, from, drac, railLength, road, sea);
 
+    disposeMap(europe);
     return res;
 }
 
-Map getMap(GameView currentView) {
-    return currentView->map;
-}
 
-PlayerMessage* getMessageLastTurnCurPlayer(GameView currentView, PlayerID player) {
-    int numOfItems = sizeof(*(currentView->messages))/sizeof(*(currentView->messages)[0]);
-    //assert(numOfItems > 5);
-    return currentView->messages[numOfItems-6];
+// Find out what minions are placed at the specified location
+void getMinions(GameView game, LocationID where, int *numTraps, int *numVamps) {
+    assert(validPlace(where));
+    int traps = 0;
+    int i;
+
+    for (i=0; i<MAX_TRAPS; i++) {
+        if ( game->cities[where].trap[i] != NO_ITEM )
+            traps++;
+    }
+
+    int vamps;
+    if ( game->cities[where].vamp != NO_ITEM )
+        vamps = 1;
+    else
+        vamps = 0;
+
+    *numTraps = traps;
+    *numVamps = vamps;
 }

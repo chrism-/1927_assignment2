@@ -7,7 +7,6 @@
 #include "Globals.h"
 #include "Game.h"
 #include "Places.h"
-#include "Map.h"
 
 typedef struct gameView *GameView;
 
@@ -126,10 +125,5 @@ void getHistory(GameView currentView, PlayerID player,
 LocationID *connectedLocations(GameView currentView, int *numLocations,
                                LocationID from, PlayerID player, Round round,
                                int road, int rail, int sea);
-
-// get the map stored in the struct
-Map getMap(GameView currentView);
-
-PlayerMessage* getMessageLastTurnCurPlayer(GameView currentView, PlayerID player);
 
 #endif

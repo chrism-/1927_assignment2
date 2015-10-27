@@ -1,127 +1,31 @@
 // dracula.c
 // Implementation of your "Fury of Dracula" Dracula AI
 
+#include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 #include "Game.h"
+#include "Places.h"
 #include "DracView.h"
+#include "dracula.h"
 
 void decideDraculaMove(DracView gameState)
-{
-	printf("Monday 4-6 group.\n");
-	// TODO ...
-	// Replace the line below by something better
+{	
+    char* nextPos = NULL;
 
-	/*
-	// improved AI in the future
-	int hunterPosition[4];
-	char* nextPos = NULL;
-	int Round;
-	int *numLocations = 0;
-
-	hunterPosition[PLAYER_LORD_GODALMING] = whereIs(gameState, PLAYER_LORD_GODALMING);
-	hunterPosition[PLAYER_DR_SEWARD] = whereIs(gameState, PLAYER_DR_SEWARD);
-	hunterPosition[PLAYER_VAN_HELSING] = whereIs(gameState, PLAYER_VAN_HELSING);
-	hunterPosition[PLAYER_MINA_HARKER] = whereIs(gameState, PLAYER_MINA_HARKER);
-
-	Round = giveMeTheRound(gameState);
-	if (Round == 0){
-		nextPos = "PA";
-	}
-
-	// where can i go?
-
-	int DraculaNextPossibleMove[71] = {0};
-	DraculaNextPossibleMove = whereCanIgo(gameState, numLocations, 1, 1);
-
-	*/
-   	char* nextPos = NULL;
-	char* prevPos = NULL;
-	char* hidePos = NULL;
    	if (giveMeTheRound(gameState) == 0){
       nextPos = "MR";
   	} else {
-		PlayerMessage message;
-		strcpy(message, *(MessageLastTurn(gameState)));
+        int numLocations;
+        LocationID* possibleDest = whereCanIgo(gameState, &numLocations, 1, 0);
 
-		strncpy(nextPos, message, 2);
-		strncpy(prevPos, message+2, 2);
-		strncpy(hidePos, message+4, 2);
+        srand((unsigned int)time(NULL)); //seed random
 
-	  	if (strcmp(nextPos,"MR") == 0) {
-	      nextPos = "TO";
-	      prevPos = "MR";
-	   } else if (strcmp(nextPos,"TO") == 0) {
-	      nextPos = "BA";
-	      prevPos = "TO";
-	   } else if (strcmp(nextPos,"BA") == 0) {
-	      nextPos = "SR";
-	      prevPos = "BA";
-	   } else if (strcmp(nextPos,"SR") == 0 && strcmp(prevPos,"BA") == 0) {
-	      nextPos = "MA";
-	      prevPos = "SR";
-	   } else if (strcmp(nextPos,"MA") == 0) {
-	      nextPos = "HI";
-	      hidePos = "MA";
-	  } else if (strcmp(nextPos,"HI") == 0 && strcmp(hidePos,"MA") == 0){
-	      nextPos = "AL";
-	      prevPos = "HI";
-	   } else if (strcmp(nextPos,"AL") == 0) {
-	      nextPos = "GR";
-	      prevPos = "AL";
-	   } else if (strcmp(nextPos,"GR") == 0) {
-	      nextPos = "LS";
-	      prevPos = "GR";
-	   } else if (strcmp(nextPos,"LS") == 0) {
-	      nextPos = "SN";
-	      prevPos = "LS";
-	   } else if (strcmp(nextPos,"SN") == 0) {
-	      nextPos = "SR";
-	      prevPos = "SN";
-	   } else if (strcmp(nextPos,"SR") == 0 && strcmp(prevPos,"SN") == 0) {
-	      nextPos = "BO";
-	      prevPos = "SR";
-	   } else if (strcmp(nextPos,"BO") == 0) {
-	      nextPos = "CF";
-	      hidePos = "BO";
-	   } else if (strcmp(nextPos,"CF") == 0) {
-	      nextPos = "GE";
-	      hidePos = "CF";
-	   } else if (strcmp(nextPos,"GE") == 0) {
-	      nextPos = "ZU";
-	      hidePos = "GE";
-	   } else if (strcmp(nextPos,"ZU") == 0) {
-	      nextPos = "MI";
-	      hidePos = "ZU";
-	   } else if (strcmp(nextPos,"MI") == 0) {
-	      nextPos = "HI";
-	      hidePos = "MI";
-	  } else if ((strcmp(nextPos,"HI") == 0) && (strcmp(prevPos,"MI") == 0)){
-	   	nextPos = "MR";
-	   	prevPos = "HI";
-	   }
-   }
-
-	PlayerMessage msg;
-
-	if (prevPos != NULL) {
-		strcat(msg, prevPos);
-	} else {
-		strcat(msg, "XX");
-	}
-	if (nextPos != NULL) {
-		strcat(msg, nextPos);
-	} else {
-		strcat(msg, "XX");
-	}
-	if (hidePos != NULL) {
-		strcat(msg, hidePos);
-	} else {
-		strcat(msg, "XX");
+        nextPos = idToName(possibleDest[rand()%numLocations]);
 	}
 
-	strcat(msg, "\0");
+	PlayerMessage msg = "Dracula MSG";
 
 	registerBestPlay(nextPos,msg);
 }
+
